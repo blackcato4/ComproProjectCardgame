@@ -44,15 +44,15 @@ string cardDesc(CardType t) {
         case CardType::HeavyAttack: return " Damage 20% ";
         case CardType::HealSmall:   return " Heal 10% HP";
         case CardType::HealBig:     return " Heal 20% HP";
-        case CardType::GuardSmall:  return " Guard 10%";
-        case CardType::GuardBig:    return " Guard 20%";
+        case CardType::GuardSmall:  return " Guard 25%";
+        case CardType::GuardBig:    return " Guard 50%";
         case CardType::LifeSteal:   return " Damage 15% || Heal 10%";
         case CardType::Regen:       return " Heal 5% HP per turn 3 turn";
         case CardType::Pierce:      return " Damage 15% [Guard not count]";
         case CardType::Reset:       return " Reset all guard and regen status of enemy";
         case CardType::Death:       return " Damage 30% [Enemy] || Damage 10% [Player]";
         case CardType::GodShield:   return " Block all damage once";
-        case CardType::Nuke:        return "Damage 30% [Enemy] || Damage 10% [Player]";
+        case CardType::Nuke:        return " Damage 50% [Enemy] || Damage 50% [Player]";
     }
     return "";
 }
@@ -177,10 +177,10 @@ struct Game {
                 break;
             case CardType::GuardSmall:
                 // โล่ไม่ซ้อนทับกัน เลือกค่าสูงสุด
-                me.guard = max(me.guard, 0.10f);
+                me.guard = max(me.guard, 0.25f);
                 break;
             case CardType::GuardBig:
-                me.guard = max(me.guard, 0.20f);
+                me.guard = max(me.guard, 0.50f);
                 break;
             case CardType::LifeSteal:
                 en.takeDamage(en.maxHp * 0.15f);
@@ -204,7 +204,7 @@ struct Game {
                 me.heal(me.lastTurnDmg);
                 break;
             case CardType::Nuke:
-                en.takeDamage(en.maxHp * 0.50f, true);
+                en.takeDamage(en.maxHp * 0.50f, true); // เราจะตายกันหมด 
                 me.takeDamage(me.maxHp * 0.50f, true); // True เพื่อให้ดาเมจเข้าตัวตรงๆ ไม่สนเกราะ
                 break;    
         }
@@ -242,20 +242,20 @@ struct Game {
             if (!(cin >> idx)) {
                 cin.clear();
                 cin.ignore(10000, '\n');
-                cout << "❌ Invalid input. Please enter a number.\n";
+                cout << "X Invalid input. Please enter a number.\n";
                 continue;
             }
 
             if (idx == -1) break; // กดจบเทิร์น
             
             if (idx < 0 || idx >= p[cur].hand.size()) {
-                cout << "❌ Invalid card index!\n";
+                cout << "X Invalid card index!\n";
                 continue;
             }
 
             Card c = p[cur].hand[idx];
             if (isSpecial(c.type) && usedSpecial) {
-                cout << "❌ You can only use 1 Special Card per turn!\n";
+                cout << "X You can only use 1 Special Card per turn!\n";
                 continue;
             }
 
