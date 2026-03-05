@@ -1,0 +1,332 @@
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <random>
+#include <string>
+
+using namespace std;
+
+enum class CardType {
+    LightAttack = 1, HeavyAttack, HealSmall, HealBig,
+    GuardSmall, GuardBig, LifeSteal, Regen,
+    Pierce, Reset, Death, GodShield ,Nuke
+};
+
+struct Card {
+    CardType type;
+};
+
+string cardName(CardType t) {
+    switch (t) {
+        case CardType::LightAttack: return "\033[31m  Light Attack\033[0m";
+        case CardType::HeavyAttack: return "\033[31m  Heavy Attack\033[0m";
+        case CardType::HealSmall:   return "\033[32m  Small Heal\033[0m";
+        case CardType::HealBig:     return "\033[32m  Big Heal\033[0m";
+        case CardType::GuardSmall:  return "\033[34m  Small Guard\033[0m";
+        case CardType::GuardBig:    return "\033[34m  Big Guard\033[0m";
+        case CardType::LifeSteal:   return "\033[31m  Life\033[0m  \033[32mSteal\033[0m";
+        case CardType::Regen:       return "\033[32m  Regeneration\033[0m";
+        case CardType::Pierce:      return "\033[31m  Piercing Attack\033[0m";
+        case CardType::Reset:       return "\033[31m  R\033[0m\033[32me\033[0m\033[33ms\033[0m\033[34me\033[0m\033[33mt\033[0m (Special) ";
+        case CardType::Death:       return "\033[31m  Death Card \033[0m (Special)";
+        case CardType::GodShield:   return "\033[34m  God Shield \033[0m (Special)";
+        case CardType::Nuke:        return "\033[31m  Nuke \033[0m (Special)";
+    }
+    return "";
+}
+
+string cardDesc(CardType t) {
+    switch (t) {
+        case CardType::LightAttack: return " Damage 10% ";
+        case CardType::HeavyAttack: return " Damage 20% ";
+        case CardType::HealSmall:   return " Heal 10% HP";
+        case CardType::HealBig:     return " Heal 20% HP";
+        case CardType::GuardSmall:  return " Guard 10%";
+        case CardType::GuardBig:    return " Guard 20%";
+        case CardType::LifeSteal:   return " Damage 15% || Heal 10%";
+        case CardType::Regen:       return " Heal 5% HP per turn 3 turn";
+        case CardType::Pierce:      return " Damage 15% [Guard not count]";
+        case CardType::Reset:       return " Reset all guard and regen status of enemy";
+        case CardType::Death:       return " Damage 30% [Enemy] || Damage 10% [Player]";
+        case CardType::GodShield:   return " Block all damage once";
+        case CardType::Nuke:        return "Damage 50% [Enemy] || Damage 50% [Player]";
+    }
+    return "";
+}
+
+struct Player {
+    float hp = 100, maxHp = 100; // ใช้ค่า 100% เป็นฐานหลัก
+    float guard = 0;
+    bool godShield = false;
+    int regenTurn = 0;
+    float lastTurnDmg = 0; // เก็บค่าดาเมจที่โดนในเทิร์นศัตรูก่อนหน้า สำหรับการ์ดโล่เทพ
+
+    vector<Card> deck;
+    vector<Card> hand;
+
+    void draw(int n) {
+        while (n-- > 0 && !deck.empty()) {
+            hand.push_back(deck.back());
+            deck.pop_back();
+        }
+    }
+
+    void heal(float p) {
+        hp += p;
+        if (hp > maxHp) hp = maxHp;
+    }
+
+    void takeDamage(float dmg, bool ignoreGuard = false) {
+        if (godShield) {
+            godShield = false; // กันดาเมจได้ 1 ครั้ง
+            return;
+        }
+        if (!ignoreGuard) {
+            dmg *= (1.0f - guard);
+        }
+        hp -= dmg;
+        lastTurnDmg += dmg; // สะสมดาเมจที่โดนโจมตี
+        if (hp < 0) hp = 0;
+    }
+
+    void resetStatus() {
+        guard = 0;
+        regenTurn = 0;
+        godShield = false;
+    }
+};
+
+struct Game {
+    Player p[2];
+    int cur = 0;
+    int usedCard = 0;
+    bool usedSpecial = false;
+
+    void initDeck(Player& pl) {
+        vector<Card> base;
+        // การ์ด 1-9 มีอย่างละ 2 ใบ รวม 18 ใบ
+        for (int i = 1; i <= 9; i++) {
+            base.push_back({ (CardType)i });
+            base.push_back({ (CardType)i });
+        }
+        // การ์ด 10-13 การ์ดพิเศษ มีอย่างละ 1 ใบ รวม 4 ใบ
+        for (int i = 10; i <= 13; i++) {
+            base.push_back({ (CardType)i });
+        }
+        // สับกองการ์ด
+        random_device rd;
+        mt19937 g(rd());
+        shuffle(base.begin(), base.end(), g);
+        pl.deck = base;
+    }
+
+    void startGame() {
+        for (int i = 0; i < 2; i++) {
+            initDeck(p[i]);
+            p[i].draw(5); // จั่วเริ่ม 5 ใบ
+        }
+        cur = 0;
+        startTurn();
+    }
+
+    void startTurn() {
+        Player& me = p[cur];
+        
+        usedCard = 0;
+        usedSpecial = false;
+        
+        // รีเซ็ตสถานะป้องกันของเทิร์นตัวเอง
+        me.guard = 0; 
+        me.lastTurnDmg = 0; // ล้างค่าดาเมจสะสมเมื่อเข้าเทิร์นใหม่
+
+        // ระบบฟื้นฟูต่อเนื่อง
+        if (me.regenTurn > 0) {
+            me.heal(me.maxHp * 0.05f);
+            me.regenTurn--;
+        }
+
+        // จั่วเพิ่ม 1 ใบตอนต้นเทิร์น
+        me.draw(2);
+    }
+
+    bool isSpecial(CardType t) {
+        return (int)t >= 10;
+    }
+
+    void apply(Card c) {
+        Player& me = p[cur];
+        Player& en = p[1 - cur];
+
+        switch (c.type) {
+            case CardType::LightAttack:
+                en.takeDamage(en.maxHp * 0.10f);
+                break;
+            case CardType::HeavyAttack:
+                en.takeDamage(en.maxHp * 0.20f);
+                break;
+            case CardType::HealSmall:
+                me.heal(me.maxHp * 0.10f);
+                break;
+            case CardType::HealBig:
+                me.heal(me.maxHp * 0.20f);
+                break;
+            case CardType::GuardSmall:
+                // โล่ไม่ซ้อนทับกัน เลือกค่าสูงสุด
+                me.guard = max(me.guard, 0.10f);
+                break;
+            case CardType::GuardBig:
+                me.guard = max(me.guard, 0.20f);
+                break;
+            case CardType::LifeSteal:
+                en.takeDamage(en.maxHp * 0.15f);
+                me.heal(me.maxHp * 0.10f);
+                break;
+            case CardType::Regen:
+                me.regenTurn = 3;
+                break;
+            case CardType::Pierce:
+                en.takeDamage(en.maxHp * 0.15f, true);
+                break;
+            case CardType::Reset:
+                en.resetStatus();
+                break;
+            case CardType::Death:
+                en.takeDamage(en.maxHp * 0.30f);
+                me.takeDamage(me.maxHp * 0.10f);
+                break;
+            case CardType::GodShield:
+                me.godShield = true;
+                me.heal(me.lastTurnDmg);
+                break;
+            case CardType::Nuke:
+                en.takeDamage(en.maxHp * 0.50f, true);
+                me.takeDamage(me.maxHp * 0.50f, true); // True เพื่อให้ดาเมจเข้าตัวตรงๆ ไม่สนเกราะ
+                break;    
+        }
+    }
+//
+    void showStatus() {
+        if (cur==0){
+            cout << "\n=====================================================================================================================================================================\n";
+        cout << "\033[31m"<<"                                                                  PLAYER " << cur + 1 << " TURN"<<"\033[0m"<<"\n";
+        cout << "=====================================================================================================================================================================\n";
+        }
+        else{cout << "\n=====================================================================================================================================================================\n";
+       cout << "\033[34m"<<"                                                                  PLAYER " << cur + 1 << " TURN"<<"\033[0m"<<"\n";
+        cout << "=====================================================================================================================================================================\n";
+        }
+        cout << " " << "\n";
+        cout << "[Player 1] HP: " << p[0].hp << "% | Shield: " << (p[0].godShield ? "GOD " : "") << (p[0].guard * 100) << "% | Regen: " << p[0].regenTurn << " | Deck: " << p[0].deck.size() << "\n";
+        cout << "[Player 2] HP: " << p[1].hp << "% | Shield: " << (p[1].godShield ? "GOD " : "") << (p[1].guard * 100) << "% | Regen: " << p[1].regenTurn << " | Deck: " << p[1].deck.size() << "\n";
+        cout << " " << "\n";
+        cout << "-------------------------------------------------------\n";
+        cout << "Your Hand (" << p[cur].hand.size() << " cards):\n";
+        cout << " " << "\n";
+
+        for (int i = 0; i < p[cur].hand.size(); i++) {
+            CardType t = p[cur].hand[i].type;
+            cout << "  [" << i << "] " << cardName(t) << "\n         " << cardDesc(t) << "\n";
+        }
+        cout << "-------------------------------------------------------\n";
+    }
+
+    void playTurn() {
+        while (usedCard < 2 && !p[cur].hand.empty()) {
+            showStatus();
+            cout << " " << "\n";
+            cout << "Cards played this turn: " << usedCard << "/2\n";
+            cout << "Choose a card to play (0 to " << p[cur].hand.size() - 1 << "), or -1 to End Turn: ";
+            cout << " " << "\n";
+            int idx; 
+            
+            // ดักจับ Input error (เช่น เผลอพิมพ์ตัวอักษร)
+            if (!(cin >> idx)) {
+                cin.clear();
+                cin.ignore(10000, '\n');
+                cout << " Invalid input. Please enter a number.\n";
+                continue;
+            }
+
+            if (idx == -1) break; // กดจบเทิร์น
+            
+            if (idx < 0 || idx >= p[cur].hand.size()) {
+                cout << " Invalid card index!\n";
+                continue;
+            }
+
+            Card c = p[cur].hand[idx];
+            if (isSpecial(c.type) && usedSpecial) {
+                cout << " You can only use 1 Special Card per turn!\n";
+                continue;
+            }
+
+            // แสดงผลว่าใช้การ์ดอะไร
+            cout << "\n>>> Player " << cur + 1 << " used [" << cardName(c.type) << "] <<<\n";
+            
+            apply(c);
+            
+            if (isSpecial(c.type)) usedSpecial = true;
+            usedCard++;
+            
+            // ลบการ์ดที่ใช้แล้วออกจากมือ
+            p[cur].hand.erase(p[cur].hand.begin() + idx);
+            
+            // เช็คว่ามีคนตายระหว่างเทิร์นหรือไม่
+            if (p[0].hp <= 0 || p[1].hp <= 0) break;
+        }
+
+        // สลับฝั่งเล่น
+        cur = 1 - cur;
+        if (!isEnd()) {
+            startTurn();
+        }
+    }
+
+    bool isEnd() {
+        // เกมจบเมื่อ HP ฝั่งใดฝั่งหนึ่งหมด หรือ การ์ดบนมือฝั่งใดฝั่งหนึ่งหมด
+        return p[0].hp <= 0 || p[1].hp <= 0 || p[0].hand.empty() || p[1].hand.empty();
+    }
+
+    void result() {
+        cout << "\n=====================================================================================================================================================================\n";
+        cout << "                                                                             GAME OVER\n";
+        cout << "=====================================================================================================================================================================\n";
+        cout << " " << "\n";
+        cout <<  "\033[31m"<<"Player 1 HP: " << p[0].hp << "%"<<"\033[0m"<<"\n";
+        cout << "\033[34m"<<"Player 2 HP: " << p[1].hp << "%"<<"\033[0m"<<"\n";
+
+        if (p[0].hp > p[1].hp) cout << "\033[31m"<<" Player 1 Wins!"<<"\033[0m"<<"\n";
+        else if (p[1].hp > p[0].hp) cout <<"\033[34m"<< " Player 2 Wins!"<<"\033[0m"<<"\n";
+        else cout << "\033[32m"<<" Tie!\n"<<"\033[0m"<<"\n";
+    }
+};
+//
+int main() {
+    int choice;
+    do {
+        Game g;
+        g.startGame();
+        
+        while (!g.isEnd()) {
+            g.playTurn();
+        }
+        
+        g.result();
+
+        cout<<"--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n";
+        cout << "\n[1] Play Again" << endl;
+        cout << "[0] Exit Game" << endl;
+        cout << "Enter your choice: ";
+        
+        
+        while (!(cin >> choice) || (choice != 0 && choice != 1)) {
+            cin.clear();
+            cin.ignore(10000, '\n');
+            cout << "Invalid input. Please enter 1 to play again or 0 to exit: ";
+        }
+
+    } while (choice == 1);
+    cout<<"\n--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n";
+    cout << "\nThank you for playing!\n660610683 {card1-4}\n660610808 {card9-12}\n660610813 {card5-8}\n670610755 {card13 || base-game || teminal-interface}\n670610758 {base-game || teminal-interface} ";
+    return 0;
+}
