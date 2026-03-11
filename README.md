@@ -8,7 +8,5 @@ Card game // turn-based
 670610755	นายดิษยณัช คุรุสิงห์ //
 670610758	นายธนภัทร คำสวัสดิ์วงศ์ //
 
-แหล่งข้อมูลที่เกี่ยวข้อง
-
-Google Drive - สำหรับส่งไฟล์งาน
-https://drive.google.com/drive/folders/1WWoTJQoXD2TH_2rVx5p6yYpf-_1ev9JP?usp=sharing
+Google Drive - GUI version
+https://drive.google.com/drive/folders/1tLdUjzPK8Pi7XqIP34ZKV3HRWS9MruSA?usp=sharing
